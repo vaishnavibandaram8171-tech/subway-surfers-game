@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Subway Surfers Clone</title>
+    <style>
+        body {
+            margin: 0;
+            background: #222;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        canvas {
+            background: #333;
+            border: 4px solid #fff;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        #ui {
+            margin-top: 10px;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        #controls {
+            margin-top: 5px;
+            font-size: 14px;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+    <div id="ui">Score: <span id="scoreVal">0</span></div>
+    <div id="controls">Use <b>Left / Right Arrow Keys</b> to switch lanes. Avoid the trains!</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const scoreVal = document.getElementById("scoreVal");
+
+// Game Settings
+const LANE_WIDTH = canvas.width / 3;
+let score = 0;
+let gameOver = false;
+let gameSpeed = 5;
+
+// Player Setup
+const player = {
+    lane: 1, // 0 = Left, 1 = Center, 2 = Right
+    x: LANE_WIDTH * 1 + LANE_WIDTH / 2,
+    y: canvas.height - 100,
+    radius: 20,
+    targetX: LANE_WIDTH * 1 + LANE_WIDTH / 2,
+    color: '#ff4757'
+};
+
+// Obstacles (Trains/Blocks)
+const obstacles = [];
+const obstacleColors = ['#ffa502', '#2ed573', '#1e90ff'];
+
+function spawnObstacle() {
+    if (gameOver) return;
+    const lane = Math.floor(Math.random() * 3);
+    obstacles.push({
+        lane: lane,
+        x: lane * LANE_WIDTH + (LANE_WIDTH - 40) / 2,
+        y: -100,
+        width: 40,
+        height: 80,
+        color: obstacleColors[Math.floor(Math.random() * obstacleColors.length)]
+    });
+    
+    // Schedule next spawn with slight randomness
+    setTimeout(spawnObstacle, Math.random() * 1000 + 1000 - (gameSpeed * 5));
+}
+
+// Input Handling
+window.addEventListener('keydown', (e) => {
+    if (gameOver) {
+        if (e.key === 'r' || e.key === 'R') {
+            resetGame();
+        }
+        return;
+    }
+    
+    if (e.key === 'ArrowLeft' && player.lane > 0) {
+        player.lane--;
+    } else if (e.key === 'ArrowRight' && player.lane < 2) {
+        player.lane++;
+    }
+    player.targetX = player.lane * LANE_WIDTH + LANE_WIDTH / 2;
+});
+
+function resetGame() {
+    obstacles.length = 0;
+    score = 0;
+    gameSpeed = 5;
+    player.lane = 1;
+    player.targetX = LANE_WIDTH * 1 + LANE_WIDTH / 2;
+    player.x = player.targetX;
+    gameOver = false;
+    spawnObstacle();
+    update();
+}
+
+// Main Game Loop
+function update() {
+    if (gameOver) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#fff';
+        ctx.font = '30px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 20);
+        ctx.font = '20px Arial';
+        ctx.fillText("Press 'R' to Restart", canvas.width / 2, canvas.height / 2 + 20);
+        return;
+    }
+
+    // Clear Canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw Lanes
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 2;
+    for (let i = 1; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * LANE_WIDTH, 0);
+        ctx.lineTo(i * LANE_WIDTH, canvas.height);
+        ctx.stroke();
+    }
+
+    // Smooth Player Movement Interp
+    player.x += (player.targetX - player.x) * 0.25;
+
+    // Draw Player
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+    ctx.fillStyle = player.color;
+    ctx.fill();
+    ctx.closePath();
+
+    // Move & Draw Obstacles
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        let obs = obstacles[i];
+        obs.y += gameSpeed;
+
+        // Draw Obstacle
+        ctx.fillStyle = obs.color;
+        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+
+        // Collision Check (AABB vs Circle approximation)
+        let closestX = Math.max(obs.x, Math.min(player.x, obs.x + obs.width));
+        let closestY = Math.max(obs.y, Math.min(player.y, obs.y + obs.height));
+        let distanceX = player.x - closestX;
+        let distanceY = player.y - closestY;
+        let distanceSquared = (distanceX * distanceX) + (distanceY * distanceY);
+
+        if (distanceSquared < (player.radius * player.radius)) {
+            gameOver = true;
+        }
+
+        // Score tracking & cleanup
+        if (obs.y > canvas.height) {
+            obstacles.splice(i, 1);
+            score += 10;
+            scoreVal.innerText = score;
+            
+            // Gradually increase speed
+            if (score % 50 === 0) {
+                gameSpeed += 0.5;
+            }
+        }
+    }
+
+    requestAnimationFrame(update);
+}
+
+// Start Game
+spawnObstacle();
+update();
+</script>
+</body>
+</html>
