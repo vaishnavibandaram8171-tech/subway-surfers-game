@@ -6,6 +6,12 @@ public class Obstacle : MonoBehaviour
     private PlayerController playerController;
     private GameManager gameManager;
 
+    public float MoveSpeed
+    {
+        get => moveSpeed;
+        set => moveSpeed = value;
+    }
+
     void Start()
     {
         playerController = FindObjectOfType<PlayerController>();
@@ -22,14 +28,15 @@ public class Obstacle : MonoBehaviour
     {
         if (collision.CompareTag("Player"))
         {
-            if (!playerController.IsSliding())
+            if (playerController != null && playerController.IsSliding())
+            {
+                Destroy(gameObject);
+                return;
+            }
+
+            if (gameManager != null)
             {
                 gameManager.GameOver();
-            }
-            else
-            {
-                // Obstacle avoided by sliding
-                Destroy(gameObject);
             }
         }
     }

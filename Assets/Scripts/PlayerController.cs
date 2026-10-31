@@ -7,7 +7,7 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float jumpForce = 5f;
     [SerializeField] private float slideDistance = 2f;
     [SerializeField] private float slideDuration = 0.5f;
-    
+
     private int desiredLane = 1; // 0=Left, 1=Middle, 2=Right
     private int currentLane = 1;
     private Rigidbody rb;
@@ -16,17 +16,19 @@ public class PlayerController : MonoBehaviour
     private float slideTimer = 0f;
     private Vector3 originalScale;
     private GameManager gameManager;
+    private AudioManager audioManager;
 
     void Start()
     {
         rb = GetComponent<Rigidbody>();
         gameManager = FindObjectOfType<GameManager>();
+        audioManager = AudioManager.Instance;
         originalScale = transform.localScale;
     }
 
     void Update()
     {
-        if (gameManager.isGameOver) return;
+        if (gameManager != null && gameManager.isGameOver) return;
 
         HandleInput();
         HandleMovement();
@@ -75,8 +77,14 @@ public class PlayerController : MonoBehaviour
     void Jump()
     {
         if (isSliding) return;
+
         isJumping = true;
         rb.velocity = new Vector3(rb.velocity.x, jumpForce, rb.velocity.z);
+
+        if (audioManager != null)
+        {
+            audioManager.PlayJumpSound();
+        }
     }
 
     void StartSlide()
@@ -106,7 +114,7 @@ public class PlayerController : MonoBehaviour
             isJumping = false;
         }
 
-        if (collision.gameObject.CompareTag("Obstacle"))
+        if (collision.gameObject.CompareTag("Obstacle") && (gameManager != null && !gameManager.isGameOver))
         {
             gameManager.GameOver();
         }

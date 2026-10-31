@@ -10,7 +10,11 @@ public class CameraController : MonoBehaviour
     {
         if (playerTransform == null)
         {
-            playerTransform = FindObjectOfType<PlayerController>().transform;
+            PlayerController player = FindObjectOfType<PlayerController>();
+            if (player != null)
+            {
+                playerTransform = player.transform;
+            }
         }
     }
 

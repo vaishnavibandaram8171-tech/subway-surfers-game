@@ -2,12 +2,10 @@ using UnityEngine;
 
 public class SpeedIncreaser : MonoBehaviour
 {
-    [SerializeField] private Obstacle[] obstacles;
-    [SerializeField] private Coin[] coins;
     [SerializeField] private float initialSpeed = 30f;
     [SerializeField] private float speedIncreaseRate = 0.5f;
     [SerializeField] private float maxSpeed = 60f;
-    
+
     private float currentSpeed;
     private GameManager gameManager;
 
@@ -15,27 +13,34 @@ public class SpeedIncreaser : MonoBehaviour
     {
         gameManager = FindObjectOfType<GameManager>();
         currentSpeed = initialSpeed;
+        ApplySpeed();
     }
 
     void Update()
     {
-        if (gameManager.isGameOver) return;
+        if (gameManager == null || gameManager.isGameOver)
+        {
+            return;
+        }
 
         // Increase speed based on score
         float targetSpeed = initialSpeed + (gameManager.score / 100f) * speedIncreaseRate;
         currentSpeed = Mathf.Min(targetSpeed, maxSpeed);
+        ApplySpeed();
+    }
 
-        // Update speed for all obstacles and coins
+    void ApplySpeed()
+    {
         Obstacle[] allObstacles = FindObjectsOfType<Obstacle>();
         foreach (Obstacle obstacle in allObstacles)
         {
-            // You would need to expose moveSpeed as a property in Obstacle script
+            obstacle.MoveSpeed = currentSpeed;
         }
 
         Coin[] allCoins = FindObjectsOfType<Coin>();
         foreach (Coin coin in allCoins)
         {
-            // You would need to expose moveSpeed as a property in Coin script
+            coin.MoveSpeed = currentSpeed;
         }
     }
 }

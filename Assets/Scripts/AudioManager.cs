@@ -6,9 +6,11 @@ public class AudioManager : MonoBehaviour
     [SerializeField] private AudioClip jumpSound;
     [SerializeField] private AudioClip crashSound;
     [SerializeField] private AudioClip backgroundMusic;
-    
+
     private AudioSource audioSource;
     private static AudioManager instance;
+
+    public static AudioManager Instance => instance;
 
     void Awake()
     {
@@ -17,6 +19,7 @@ public class AudioManager : MonoBehaviour
             Destroy(gameObject);
             return;
         }
+
         instance = this;
         DontDestroyOnLoad(gameObject);
     }
@@ -24,26 +27,43 @@ public class AudioManager : MonoBehaviour
     void Start()
     {
         audioSource = GetComponent<AudioSource>();
-        PlayBackgroundMusic();
+        if (audioSource != null)
+        {
+            PlayBackgroundMusic();
+        }
     }
 
     public void PlayCoinSound()
     {
-        audioSource.PlayOneShot(coinSound);
+        if (audioSource != null && coinSound != null)
+        {
+            audioSource.PlayOneShot(coinSound);
+        }
     }
 
     public void PlayJumpSound()
     {
-        audioSource.PlayOneShot(jumpSound);
+        if (audioSource != null && jumpSound != null)
+        {
+            audioSource.PlayOneShot(jumpSound);
+        }
     }
 
     public void PlayCrashSound()
     {
-        audioSource.PlayOneShot(crashSound);
+        if (audioSource != null && crashSound != null)
+        {
+            audioSource.PlayOneShot(crashSound);
+        }
     }
 
     void PlayBackgroundMusic()
     {
+        if (audioSource == null || backgroundMusic == null)
+        {
+            return;
+        }
+
         audioSource.clip = backgroundMusic;
         audioSource.loop = true;
         audioSource.Play();

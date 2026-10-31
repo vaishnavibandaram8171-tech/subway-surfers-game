@@ -8,20 +8,33 @@ public class GameManager : MonoBehaviour
     [SerializeField] private Text gameOverText;
     [SerializeField] private Button restartButton;
     [SerializeField] private Camera mainCamera;
-    
+
     public int score = 0;
     public int coins = 0;
     public bool isGameOver = false;
     private PlayerController playerController;
     private float scoreIncreaseTimer = 0f;
     [SerializeField] private float scoreIncreaseInterval = 0.1f;
+    private AudioManager audioManager;
 
     void Start()
     {
         playerController = FindObjectOfType<PlayerController>();
-        gameOverText.gameObject.SetActive(false);
-        restartButton.gameObject.SetActive(false);
-        restartButton.onClick.AddListener(RestartGame);
+        audioManager = AudioManager.Instance;
+
+        if (gameOverText != null)
+        {
+            gameOverText.gameObject.SetActive(false);
+        }
+
+        if (restartButton != null)
+        {
+            restartButton.gameObject.SetActive(false);
+            restartButton.onClick.AddListener(RestartGame);
+        }
+
+        UpdateScoreUI();
+        UpdateCoinsUI();
     }
 
     void Update()
@@ -46,21 +59,43 @@ public class GameManager : MonoBehaviour
 
     public void GameOver()
     {
+        if (isGameOver) return;
+
         isGameOver = true;
-        gameOverText.gameObject.SetActive(true);
-        gameOverText.text = $"Game Over!\nScore: {score}\nCoins: {coins}";
-        restartButton.gameObject.SetActive(true);
+
+        if (audioManager != null)
+        {
+            audioManager.PlayCrashSound();
+        }
+
+        if (gameOverText != null)
+        {
+            gameOverText.gameObject.SetActive(true);
+            gameOverText.text = $"Game Over!\nScore: {score}\nCoins: {coins}";
+        }
+
+        if (restartButton != null)
+        {
+            restartButton.gameObject.SetActive(true);
+        }
+
         Time.timeScale = 0f; // Pause the game
     }
 
     void UpdateScoreUI()
     {
-        scoreText.text = "Score: " + score;
+        if (scoreText != null)
+        {
+            scoreText.text = "Score: " + score;
+        }
     }
 
     void UpdateCoinsUI()
     {
-        coinsText.text = "Coins: " + coins;
+        if (coinsText != null)
+        {
+            coinsText.text = "Coins: " + coins;
+        }
     }
 
     void RestartGame()
