@@ -1,191 +1,590 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mini Subway Surfers Clone</title>
-    <style>
-        body {
-            margin: 0;
-            background: #222;
-            color: white;
-            font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            overflow: hidden;
-        }
-        canvas {
-            background: #333;
-            border: 4px solid #fff;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-        }
-        #ui {
-            margin-top: 10px;
-            font-size: 20px;
-            font-weight: bold;
-        }
-        #controls {
-            margin-top: 5px;
-            font-size: 14px;
-            color: #aaa;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Colorful Subway Chase</title>
+  <style>
+    :root {
+      --bg1: #3b82f6;
+      --bg2: #60a5fa;
+      --track: #374151;
+      --lane: #f8fafc;
+      --gold: #facc15;
+      --shadow: rgba(15, 23, 42, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(180deg, #0f172a 0%, #1d4ed8 100%);
+      font-family: Arial, sans-serif;
+      color: white;
+    }
+
+    .game-shell {
+      text-align: center;
+      padding: 16px;
+    }
+
+    canvas {
+      width: min(92vw, 430px);
+      height: auto;
+      background: linear-gradient(180deg, #93c5fd 0%, #dbeafe 45%, #cbd5e1 100%);
+      border: 5px solid #fff;
+      border-radius: 18px;
+      box-shadow: 0 16px 35px rgba(15, 23, 42, 0.45);
+      image-rendering: auto;
+    }
+
+    .hud {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 700;
+      margin-top: 12px;
+      font-size: 18px;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      background: rgba(255,255,255,0.18);
+      border: 2px solid rgba(255,255,255,0.35);
+      border-radius: 10px;
+      padding: 8px 14px;
+    }
+
+    .controls {
+      margin-top: 8px;
+      font-size: 14px;
+      color: #e2e8f0;
+      line-height: 1.5;
+    }
+  </style>
 </head>
 <body>
+  <div class="game-shell">
+    <canvas id="gameCanvas" width="430" height="700"></canvas>
+    <div class="hud">
+      <div class="badge">Score: <span id="score">0</span></div>
+      <div class="badge">Coins: <span id="coins">0</span></div>
+      <div class="badge">Best: <span id="best">0</span></div>
+    </div>
+    <div class="controls">
+      A / D = move lanes &nbsp;|&nbsp; W / Space = jump &nbsp;|&nbsp; S = slide &nbsp;|&nbsp; R = restart
+    </div>
+  </div>
 
-    <canvas id="gameCanvas" width="400" height="600"></canvas>
-    <div id="ui">Score: <span id="scoreVal">0</span></div>
-    <div id="controls">Use <b>Left / Right Arrow Keys</b> to switch lanes. Avoid the trains!</div>
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const coinsEl = document.getElementById('coins');
+    const bestEl = document.getElementById('best');
 
-<script>
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
-const scoreVal = document.getElementById("scoreVal");
+    const lanes = [96, 215, 334];
+    const baseGroundY = 610;
+    const keys = {};
 
-// Game Settings
-const LANE_WIDTH = canvas.width / 3;
-let score = 0;
-let gameOver = false;
-let gameSpeed = 5;
+    let score = 0;
+    let coins = 0;
+    let best = Number(localStorage.getItem('subway-best') || 0);
+    bestEl.textContent = best;
 
-// Player Setup
-const player = {
-    lane: 1, // 0 = Left, 1 = Center, 2 = Right
-    x: LANE_WIDTH * 1 + LANE_WIDTH / 2,
-    y: canvas.height - 100,
-    radius: 20,
-    targetX: LANE_WIDTH * 1 + LANE_WIDTH / 2,
-    color: '#ff4757'
-};
+    let gameOver = false;
+    let speed = 6;
+    let spawnTimer = 0;
+    let pickupSpawnTimer = 0;
+    let lastTime = 0;
 
-// Obstacles (Trains/Blocks)
-const obstacles = [];
-const obstacleColors = ['#ffa502', '#2ed573', '#1e90ff'];
+    const player = {
+      lane: 1,
+      x: lanes[1],
+      y: baseGroundY - 10,
+      width: 36,
+      height: 52,
+      baseHeight: 52,
+      slideHeight: 30,
+      isSliding: false,
+      slideTimer: 0,
+      jumpVelocity: 0,
+      onGround: true,
+      color: '#f97316'
+    };
 
-function spawnObstacle() {
-    if (gameOver) return;
-    const lane = Math.floor(Math.random() * 3);
-    obstacles.push({
-        lane: lane,
-        x: lane * LANE_WIDTH + (LANE_WIDTH - 40) / 2,
-        y: -100,
-        width: 40,
-        height: 80,
-        color: obstacleColors[Math.floor(Math.random() * obstacleColors.length)]
-    });
-    
-    // Schedule next spawn with slight randomness
-    setTimeout(spawnObstacle, Math.random() * 1000 + 1000 - (gameSpeed * 5));
-}
+    const obstacleTypes = ['train', 'police', 'policeDog', 'gift'];
+    const obstacles = [];
+    const coinsList = [];
+    let floatingText = [];
 
-// Input Handling
-window.addEventListener('keydown', (e) => {
-    if (gameOver) {
-        if (e.key === 'r' || e.key === 'R') {
-            resetGame();
+    function resetGame() {
+      score = 0;
+      coins = 0;
+      speed = 6;
+      spawnTimer = 0;
+      pickupSpawnTimer = 0;
+      obstacles.length = 0;
+      coinsList.length = 0;
+      floatingText.length = 0;
+      gameOver = false;
+      player.lane = 1;
+      player.x = lanes[1];
+      player.y = baseGroundY - 10;
+      player.onGround = true;
+      player.jumpVelocity = 0;
+      player.isSliding = false;
+      player.slideTimer = 0;
+      player.height = player.baseHeight;
+      scoreEl.textContent = score;
+      coinsEl.textContent = coins;
+    }
+
+    function clampLane() {
+      player.lane = Math.max(0, Math.min(2, player.lane));
+      player.x = lanes[player.lane];
+    }
+
+    function startJump() {
+      if (player.onGround && !gameOver) {
+        player.onGround = false;
+        player.jumpVelocity = -18;
+      }
+    }
+
+    function startSlide() {
+      if (player.onGround && !gameOver) {
+        player.isSliding = true;
+        player.slideTimer = 0.75;
+        player.height = player.slideHeight;
+      }
+    }
+
+    function updatePlayer(dt) {
+      player.jumpVelocity += 0.7;
+      player.y += player.jumpVelocity;
+
+      if (player.y >= baseGroundY - 10) {
+        player.y = baseGroundY - 10;
+        player.jumpVelocity = 0;
+        player.onGround = true;
+      }
+
+      if (player.isSliding) {
+        player.slideTimer -= dt;
+        if (player.slideTimer <= 0) {
+          player.isSliding = false;
+          player.height = player.baseHeight;
         }
-        return;
-    }
-    
-    if (e.key === 'ArrowLeft' && player.lane > 0) {
-        player.lane--;
-    } else if (e.key === 'ArrowRight' && player.lane < 2) {
-        player.lane++;
-    }
-    player.targetX = player.lane * LANE_WIDTH + LANE_WIDTH / 2;
-});
-
-function resetGame() {
-    obstacles.length = 0;
-    score = 0;
-    gameSpeed = 5;
-    player.lane = 1;
-    player.targetX = LANE_WIDTH * 1 + LANE_WIDTH / 2;
-    player.x = player.targetX;
-    gameOver = false;
-    spawnObstacle();
-    update();
-}
-
-// Main Game Loop
-function update() {
-    if (gameOver) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#fff';
-        ctx.font = '30px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 20);
-        ctx.font = '20px Arial';
-        ctx.fillText("Press 'R' to Restart", canvas.width / 2, canvas.height / 2 + 20);
-        return;
+      }
     }
 
-    // Clear Canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Draw Lanes
-    ctx.strokeStyle = '#555';
-    ctx.lineWidth = 2;
-    for (let i = 1; i < 3; i++) {
-        ctx.beginPath();
-        ctx.moveTo(i * LANE_WIDTH, 0);
-        ctx.lineTo(i * LANE_WIDTH, canvas.height);
-        ctx.stroke();
+    function addScore(value, x, y, color) {
+      score += value;
+      scoreEl.textContent = score;
+      floatingText.push({ x, y, text: `+${value}`, color, life: 1.0, vy: -22 });
+      if (score > best) {
+        best = score;
+        localStorage.setItem('subway-best', String(best));
+        bestEl.textContent = best;
+      }
     }
 
-    // Smooth Player Movement Interp
-    player.x += (player.targetX - player.x) * 0.25;
+    function spawnObstacle() {
+      const lane = Math.floor(Math.random() * 3);
+      const typeRoll = Math.random();
+      let type = 'train';
+      if (typeRoll < 0.35) type = 'police';
+      else if (typeRoll < 0.6) type = 'policeDog';
+      else if (typeRoll < 0.8) type = 'gift';
+      else type = 'train';
 
-    // Draw Player
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
-    ctx.fillStyle = player.color;
-    ctx.fill();
-    ctx.closePath();
+      obstacles.push({
+        lane,
+        x: lanes[lane],
+        y: -120,
+        width: 52,
+        height: type === 'train' ? 78 : type === 'gift' ? 42 : 58,
+        type,
+        color: type === 'train' ? '#ef4444' : type === 'police' ? '#2563eb' : type === 'policeDog' ? '#7c3aed' : '#f59e0b'
+      });
+    }
 
-    // Move & Draw Obstacles
-    for (let i = obstacles.length - 1; i >= 0; i--) {
-        let obs = obstacles[i];
-        obs.y += gameSpeed;
+    function spawnCoinTrail() {
+      const lane = Math.floor(Math.random() * 3);
+      const count = 4 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < count; i++) {
+        coinsList.push({
+          lane,
+          x: lanes[lane],
+          y: -50 - i * 35,
+          r: 10,
+          collected: false
+        });
+      }
+    }
 
-        // Draw Obstacle
-        ctx.fillStyle = obs.color;
-        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+    function rectIntersect(a, b) {
+      return (
+        a.x - a.width / 2 < b.x + b.width / 2 &&
+        a.x + a.width / 2 > b.x - b.width / 2 &&
+        a.y - a.height / 2 < b.y + b.height / 2 &&
+        a.y + a.height / 2 > b.y - b.height / 2
+      );
+    }
 
-        // Collision Check (AABB vs Circle approximation)
-        let closestX = Math.max(obs.x, Math.min(player.x, obs.x + obs.width));
-        let closestY = Math.max(obs.y, Math.min(player.y, obs.y + obs.height));
-        let distanceX = player.x - closestX;
-        let distanceY = player.y - closestY;
-        let distanceSquared = (distanceX * distanceX) + (distanceY * distanceY);
+    function circleRectIntersect(circle, rect) {
+      const closestX = Math.max(rect.x - rect.width / 2, Math.min(circle.x, rect.x + rect.width / 2));
+      const closestY = Math.max(rect.y - rect.height / 2, Math.min(circle.y, rect.y + rect.height / 2));
+      const dx = circle.x - closestX;
+      const dy = circle.y - closestY;
+      return (dx * dx + dy * dy) < circle.r * circle.r;
+    }
 
-        if (distanceSquared < (player.radius * player.radius)) {
-            gameOver = true;
-        }
+    function updateObstacles(dt) {
+      spawnTimer -= dt;
+      pickupSpawnTimer -= dt;
 
-        // Score tracking & cleanup
-        if (obs.y > canvas.height) {
+      if (spawnTimer <= 0) {
+        spawnObstacle();
+        spawnTimer = Math.max(0.85, 1.5 - speed * 0.05) + Math.random() * 0.8;
+      }
+
+      if (pickupSpawnTimer <= 0) {
+        spawnCoinTrail();
+        pickupSpawnTimer = 1.4 + Math.random() * 1.3;
+      }
+
+      for (let i = obstacles.length - 1; i >= 0; i--) {
+        const obs = obstacles[i];
+        obs.y += speed * 1.8;
+
+        if (rectIntersect(player, obs)) {
+          if (obs.type === 'gift') {
+            addScore(50, obs.x, obs.y, '#34d399');
             obstacles.splice(i, 1);
-            score += 10;
-            scoreVal.innerText = score;
-            
-            // Gradually increase speed
-            if (score % 50 === 0) {
-                gameSpeed += 0.5;
-            }
+            continue;
+          }
+          gameOver = true;
+          return;
         }
+
+        if (obs.y > canvas.height + 120) {
+          obstacles.splice(i, 1);
+        }
+      }
+
+      for (let i = coinsList.length - 1; i >= 0; i--) {
+        const coin = coinsList[i];
+        coin.y += speed * 1.8;
+
+        const coinCircle = { x: coin.x, y: coin.y, r: coin.r };
+        const playerRect = { x: player.x, y: player.y, width: player.width, height: player.height };
+
+        if (circleRectIntersect(coinCircle, playerRect)) {
+          coinsList.splice(i, 1);
+          coins += 1;
+          coinsEl.textContent = coins;
+          addScore(10, coin.x, coin.y, '#facc15');
+          continue;
+        }
+
+        if (coin.y > canvas.height + 40) {
+          coinsList.splice(i, 1);
+        }
+      }
+
+      for (let i = floatingText.length - 1; i >= 0; i--) {
+        const t = floatingText[i];
+        t.y += t.vy * dt * 0.6;
+        t.life -= dt * 0.6;
+        if (t.life <= 0) floatingText.splice(i, 1);
+      }
     }
 
-    requestAnimationFrame(update);
-}
+    function drawBackground() {
+      const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      sky.addColorStop(0, '#60a5fa');
+      sky.addColorStop(0.5, '#93c5fd');
+      sky.addColorStop(1, '#dbeafe');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-// Start Game
-spawnObstacle();
-update();
-</script>
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.arc(340, 90, 42, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      for (let i = 0; i < 9; i++) {
+        const x = 40 + i * 42;
+        const y = 80 + (i % 2) * 30;
+        ctx.fillRect(x, y, 22, 12);
+      }
+
+      ctx.fillStyle = '#94a3b8';
+      for (let i = 0; i < 7; i++) {
+        ctx.fillRect(30 + i * 60, 360 + (i % 2) * 20, 36, 120);
+      }
+
+      ctx.fillStyle = '#1f2937';
+      ctx.fillRect(0, 630, canvas.width, 120);
+
+      ctx.strokeStyle = '#f8fafc';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(0, 630);
+      ctx.lineTo(canvas.width, 630);
+      ctx.stroke();
+
+      for (let x = 0; x <= canvas.width; x += 90) {
+        ctx.fillStyle = '#d1d5db';
+        ctx.fillRect(x, 640, 22, 75);
+      }
+
+      ctx.strokeStyle = '#f8fafc';
+      ctx.lineWidth = 3;
+      for (let i = 1; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(110 + i * 110, 0);
+        ctx.lineTo(110 + i * 110, canvas.height);
+        ctx.stroke();
+      }
+    }
+
+    function drawPlayer() {
+      const px = player.x;
+      const py = player.y;
+      const w = player.width;
+      const h = player.height;
+
+      ctx.save();
+      ctx.translate(px, py);
+
+      const bodyColor = '#f97316';
+      const shirtColor = '#38bdf8';
+      const skinColor = '#f8c99b';
+
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(-w / 2 + 6, 8, w - 12, h - 18);
+
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(-w / 2 + 10, 8, w - 20, h - 18);
+
+      ctx.fillStyle = skinColor;
+      ctx.beginPath();
+      ctx.arc(0, -18, 12, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(-8, -24, 16, 8);
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(-10, -3, 7, 16);
+      ctx.fillRect(3, -3, 7, 16);
+
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(-14, 0, 8, 18);
+      ctx.fillRect(6, 0, 8, 18);
+
+      ctx.fillStyle = bodyColor;
+      ctx.fillRect(-12, h - 20, 10, 18);
+      ctx.fillRect(2, h - 20, 10, 18);
+
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(-18, 10, 6, 22);
+      ctx.fillRect(12, 10, 6, 22);
+
+      if (player.isSliding) {
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillRect(-18, 12, 36, 8);
+      }
+
+      ctx.restore();
+    }
+
+    function drawCoin(coin) {
+      ctx.save();
+      ctx.translate(coin.x, coin.y);
+      ctx.rotate(Date.now() * 0.01);
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.arc(0, 0, coin.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fef3c7';
+      ctx.fillRect(-2, -7, 4, 14);
+      ctx.restore();
+    }
+
+    function drawGift(gift) {
+      ctx.save();
+      ctx.translate(gift.x, gift.y);
+      ctx.fillStyle = '#f43f5e';
+      ctx.fillRect(-18, -16, 36, 32);
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillRect(-5, -22, 10, 44);
+      ctx.fillRect(-22, -5, 44, 10);
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(-8, -8, 16, 16);
+      ctx.restore();
+    }
+
+    function drawTrain(obs) {
+      ctx.save();
+      ctx.translate(obs.x, obs.y);
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(-26, -40, 52, 72);
+      ctx.fillStyle = '#fca5a5';
+      ctx.fillRect(-20, -18, 40, 20);
+      ctx.fillStyle = '#fef2f2';
+      ctx.fillRect(-14, -10, 10, 12);
+      ctx.fillRect(4, -10, 10, 12);
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(-24, 6, 12, 12);
+      ctx.fillRect(12, 6, 12, 12);
+      ctx.restore();
+    }
+
+    function drawPolice(obs) {
+      ctx.save();
+      ctx.translate(obs.x, obs.y);
+
+      ctx.fillStyle = '#3b82f6';
+      ctx.fillRect(-18, -14, 36, 44);
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(-14, -32, 28, 18);
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(-10, -34, 20, 8);
+      ctx.fillStyle = '#f8c99b';
+      ctx.beginPath();
+      ctx.arc(0, -42, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(-8, -18, 7, 18);
+      ctx.fillRect(1, -18, 7, 18);
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(-14, 20, 12, 18);
+      ctx.fillRect(2, 20, 12, 18);
+      ctx.restore();
+    }
+
+    function drawPoliceDog(obs) {
+      ctx.save();
+      ctx.translate(obs.x, obs.y);
+      ctx.fillStyle = '#7c3aed';
+      ctx.beginPath();
+      ctx.moveTo(-20, 18);
+      ctx.lineTo(-8, -18);
+      ctx.lineTo(8, -18);
+      ctx.lineTo(20, 18);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#f5d0fe';
+      ctx.beginPath();
+      ctx.arc(0, -28, 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(-10, 18, 8, 16);
+      ctx.fillRect(2, 18, 8, 16);
+      ctx.restore();
+    }
+
+    function drawObstacles() {
+      for (const obs of obstacles) {
+        if (obs.type === 'train') drawTrain(obs);
+        else if (obs.type === 'police') drawPolice(obs);
+        else if (obs.type === 'policeDog') drawPoliceDog(obs);
+        else drawGift(obs);
+      }
+    }
+
+    function drawPickupText() {
+      for (const t of floatingText) {
+        ctx.fillStyle = t.color + 'cc';
+        ctx.font = 'bold 22px Arial';
+        ctx.fillText(t.text, t.x, t.y);
+      }
+    }
+
+    function drawGameOver() {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.68)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 38px Arial';
+      ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 18);
+
+      ctx.font = 'bold 20px Arial';
+      ctx.fillText('Score: ' + score, canvas.width / 2, canvas.height / 2 + 22);
+      ctx.fillText('Press R to play again', canvas.width / 2, canvas.height / 2 + 60);
+    }
+
+    function update(dt) {
+      if (!gameOver) {
+        updatePlayer(dt);
+        updateObstacles(dt);
+        speed += dt * 0.015;
+      }
+    }
+
+    function render() {
+      drawBackground();
+      drawObstacles();
+      for (const coin of coinsList) drawCoin(coin);
+      drawPlayer();
+      drawPickupText();
+      if (gameOver) drawGameOver();
+    }
+
+    function loop(ts) {
+      if (!lastTime) lastTime = ts;
+      const dt = Math.min((ts - lastTime) / 1000, 0.033);
+      lastTime = ts;
+
+      update(dt);
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    document.addEventListener('keydown', (e) => {
+      keys[e.key.toLowerCase()] = true;
+
+      if (gameOver && e.key.toLowerCase() === 'r') {
+        resetGame();
+        return;
+      }
+
+      if (e.key.toLowerCase() === 'a') {
+        player.lane = Math.max(0, player.lane - 1);
+        clampLane();
+      }
+
+      if (e.key.toLowerCase() === 'd') {
+        player.lane = Math.min(2, player.lane + 1);
+        clampLane();
+      }
+
+      if (e.key.toLowerCase() === 'w' || e.key === ' ') {
+        startJump();
+      }
+
+      if (e.key.toLowerCase() === 's') {
+        startSlide();
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      keys[e.key.toLowerCase()] = false;
+    });
+
+    resetGame();
+    requestAnimationFrame(loop);
+  </script>
 </body>
 </html>
